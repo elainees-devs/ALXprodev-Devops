@@ -1,0 +1,51 @@
+#!/bin/bash
+
+# Setup
+DATA_DIR="pokemon_data"
+ERROR_LOG="errors.txt"
+POKEMON_LIST=(bulbasaur ivysaur venusaur charmander charmeleon)
+
+mkdir -p "$DATA_DIR"
+> "$ERROR_LOG"
+
+# Function to fetch one Pokémon
+fetch_pokemon() {
+  local pokemon=$1
+  local output_file="$DATA_DIR/${pokemon}.json"
+
+  for attempt in {1..3}; do
+    if curl -s -f "https://pokeapi.co/api/v2/pokemon/$pokemon" -o "$output_file"; then
+      echo "Saved data to $output_file"
+      return
+    else
+      echo "Attempt $attempt failed for $pokemon" >&2
+      sleep 1
+    fi
+  done
+
+  echo "[$(date)] Failed to fetch data for $pokemon after 3 attempts." >> "$ERROR_LOG"
+  echo "Failed to fetch data for $pokemon"
+}
+
+# Start background jobs and save their PIDs
+pids=()
+for pokemon in "${POKEMON_LIST[@]}"; do
+  echo "Fetching data for $pokemon..."
+  fetch_pokemon "$pokemon" &
+  pids+=($!)   # Save the PID of the background job
+done
+
+# Wait for all background jobs to complete
+for pid in "${pids[@]}"; do
+  wait $pid
+done
+
+# Optionally kill any lingering jobs (should be none)
+for pid in "${pids[@]}"; do
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "Killing leftover job $pid"
+    kill "$pid"
+  fi
+done
+
+echo "All fetch operations completed."
